@@ -33,6 +33,16 @@ from .validators import (
     CIScanInput,
     validate_input,
 )
+from .logging_config import setup_logging, get_logger
+
+# Initialize logging
+log_level = os.getenv("LOG_LEVEL", "INFO")
+use_json_logs = os.getenv("LOG_FORMAT", "console") == "json"
+log_file = os.getenv("LOG_FILE")
+setup_logging(log_level=log_level, use_json=use_json_logs, log_file=log_file)
+
+logger = get_logger(__name__)
+logger.info("Starting V-Raptor server", extra={"log_level": log_level})
 
 app = Flask(__name__, static_folder="static")
 app.secret_key = os.urandom(24)
@@ -62,22 +72,27 @@ try:
         """
         Performs a search and returns the top 5 results as a newline-separated string.
         """
-        print(f"Performing web search for: '{query}'")
+        logger.info("Performing web search", extra={"query": query})
         try:
             results_iterator = google_search_tool(query, num_results=5)
-            return "\n".join(list(results_iterator))
+            results = "\n".join(list(results_iterator))
+            logger.debug(
+                "Web search completed",
+                extra={"query": query, "result_count": len(results.split("\n"))},
+            )
+            return results
         except Exception as e:
-            print(f"Web search failed: {e}")
+            logger.error(
+                "Web search failed",
+                extra={"query": query, "error": str(e)},
+                exc_info=True,
+            )
             return ""
 
     di.google_web_search = google_web_search_adapter
-    print(
-        "Successfully imported and configured the googlesearch-python tool for the web server."
-    )
+    logger.info("Successfully imported and configured googlesearch-python tool")
 except ImportError:
-    print(
-        "Could not import googlesearch for the web server. Web search will be disabled."
-    )
+    logger.warning("Could not import googlesearch - web search will be disabled")
 
     def placeholder_search(query: str = ""):
         return ""
@@ -135,7 +150,11 @@ def get_models():
             # llama.cpp doesn't have listable models
             models = []
     except Exception as e:
-        print(f"Error getting models for provider {provider}: {e}")
+        logger.error(
+            "Error getting models for provider",
+            extra={"provider": provider, "client_type": client_type, "error": str(e)},
+            exc_info=True,
+        )
         return jsonify({"error": str(e)}), 500
 
     return jsonify(models)
@@ -457,12 +476,19 @@ def repository(repo_id):
     )
 
     if not repo:
+        logger.warning("Repository not found", extra={"repo_id": repo_id})
         flash(f"Repository with ID {repo_id} not found.", "error")
         return redirect(url_for("index"))
+
     scans_as_list = list(repo.scans)
-    print(f"--- DEBUG: Found repository: {repo.name} ---")
-    print(f"--- DEBUG: Scans object from relation: {repo.scans} ---")
-    print(f"--- DEBUG: Number of scans found: {len(repo.scans)} ---")
+    logger.debug(
+        "Repository details loaded",
+        extra={
+            "repo_name": repo.name,
+            "repo_id": repo_id,
+            "scan_count": len(repo.scans),
+        },
+    )
     return render_template("repository.html", repo=repo, scans_as_list=scans_as_list)
 
 

@@ -1,6 +1,9 @@
 import docker
 import io
 import tarfile
+from .logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 class SandboxService:
@@ -19,8 +22,14 @@ class SandboxService:
             # This fails early instead of silently failing later during scans
             try:
                 self.client.images.get(self.image_name)
-                print(f"✓ Sandbox image '{self.image_name}' found and ready.")
+                logger.info(
+                    "Sandbox image found and ready",
+                    extra={"image_name": self.image_name},
+                )
             except docker.errors.ImageNotFound:
+                logger.error(
+                    "Sandbox image not found", extra={"image_name": self.image_name}
+                )
                 raise RuntimeError(
                     f"Docker image '{self.image_name}' not found.\n"
                     f"Please build it with:\n"
@@ -28,24 +37,37 @@ class SandboxService:
                     f"Or use the existing Dockerfile in the project root."
                 )
         except docker.errors.DockerException as e:
+            logger.error(
+                "Docker is not running or misconfigured",
+                extra={"error": str(e)},
+                exc_info=True,
+            )
             raise RuntimeError(f"Docker is not running or misconfigured: {e}")
 
     def create_sandbox(self):
         """Creates a new sandbox from the pre-built image."""
         try:
-            print(f"Creating sandbox from image: {self.image_name}...")
+            logger.info("Creating sandbox", extra={"image_name": self.image_name})
             # Run container with a command that keeps it alive
             container = self.client.containers.run(
                 self.image_name, command="tail -f /dev/null", detach=True
             )
-            print(f"Sandbox created with ID: {container.id[:12]}")
+            container_id_short = container.id[:12]
+            logger.info(
+                "Sandbox created successfully",
+                extra={"container_id": container_id_short},
+            )
             return container.id
         except docker.errors.ImageNotFound:
-            print(f"Error: The Docker image '{self.image_name}' was not found.")
-            print("Please build the sandbox image using the provided Dockerfile.")
+            logger.error(
+                "Sandbox image not found during creation",
+                extra={"image_name": self.image_name},
+            )
             return None
         except Exception as e:
-            print(f"Error creating sandbox: {e}")
+            logger.error(
+                "Error creating sandbox", extra={"error": str(e)}, exc_info=True
+            )
             return None
 
     def execute_in_sandbox(self, container_id, command):
@@ -53,9 +75,25 @@ class SandboxService:
         try:
             container = self.client.containers.get(container_id)
             exit_code, output = container.exec_run(command)
+            logger.debug(
+                "Command executed in sandbox",
+                extra={
+                    "container_id": container_id[:12],
+                    "command": command,
+                    "exit_code": exit_code,
+                },
+            )
             return output.decode("utf-8")
         except Exception as e:
-            print(f"Error executing command in sandbox: {e}")
+            logger.error(
+                "Error executing command in sandbox",
+                extra={
+                    "container_id": container_id[:12] if container_id else None,
+                    "command": command,
+                    "error": str(e),
+                },
+                exc_info=True,
+            )
             return None
 
     def put_archive(self, container_id, path, data):
@@ -63,8 +101,20 @@ class SandboxService:
         try:
             container = self.client.containers.get(container_id)
             container.put_archive(path, data)
+            logger.debug(
+                "Archive uploaded to sandbox",
+                extra={"container_id": container_id[:12], "path": path},
+            )
         except Exception as e:
-            print(f"Error putting archive in sandbox: {e}")
+            logger.error(
+                "Error putting archive in sandbox",
+                extra={
+                    "container_id": container_id[:12] if container_id else None,
+                    "path": path,
+                    "error": str(e),
+                },
+                exc_info=True,
+            )
 
     def execute_python_script(self, container_id, script_code):
         """Executes a Python script in the sandbox by copying it."""
@@ -86,12 +136,27 @@ class SandboxService:
             container.put_archive("/app/", pw_tarstream)
 
             # Execute the script
-            return self.execute_in_sandbox(
+            result = self.execute_in_sandbox(
                 container_id, f"python3 {script_path_container}"
             )
+            logger.debug(
+                "Python script executed in sandbox",
+                extra={
+                    "container_id": container_id[:12],
+                    "script_length": len(script_code),
+                },
+            )
+            return result
 
         except Exception as e:
-            print(f"Error executing Python script: {e}")
+            logger.error(
+                "Error executing Python script",
+                extra={
+                    "container_id": container_id[:12] if container_id else None,
+                    "error": str(e),
+                },
+                exc_info=True,
+            )
             return None
 
     def destroy_sandbox(self, container_id):
@@ -99,11 +164,24 @@ class SandboxService:
         if not container_id:
             return
         try:
-            print(f"Destroying sandbox: {container_id[:12]}")
+            logger.info("Destroying sandbox", extra={"container_id": container_id[:12]})
             container = self.client.containers.get(container_id)
             container.stop(timeout=5)
             container.remove()
+            logger.debug(
+                "Sandbox destroyed successfully",
+                extra={"container_id": container_id[:12]},
+            )
         except docker.errors.NotFound:
-            pass  # Container already gone
+            logger.debug(
+                "Sandbox already removed", extra={"container_id": container_id[:12]}
+            )
         except Exception as e:
-            print(f"Error destroying sandbox: {e}")
+            logger.error(
+                "Error destroying sandbox",
+                extra={
+                    "container_id": container_id[:12] if container_id else None,
+                    "error": str(e),
+                },
+                exc_info=True,
+            )
