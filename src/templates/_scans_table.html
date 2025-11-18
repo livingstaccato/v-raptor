@@ -37,10 +37,12 @@
                 <a href="/scan/{{ scan.id }}" class="btn btn-primary btn-sm">View</a>
                 {% if scan.status.value == 'running' %}
                     <form action="/stop_scan/{{ scan.id }}" method="post" style="display: inline;" class="ms-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn btn-warning btn-sm">Stop</button>
                     </form>
                 {% endif %}
                                 <form action="/delete_scan/{{ scan.id }}" method="post" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure you want to delete this scan? This action cannot be undone.');">Delete</button>
                 </form>
             </td>

@@ -38,6 +38,7 @@
                     <p><strong>CVE:</strong> <a href="https://www.cve.org/CVERecord?id={{ finding.cve_id }}" target="_blank">{{ finding.cve_id }}</a></p>
                 {% else %}
                     <form action="/finding/{{ finding.id }}/search_cve" method="post" class="mt-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn btn-info btn-sm">Search for CVE</button>
                     </form>
                 {% endif %}
@@ -81,22 +82,26 @@
                     <hr>
                 {% endfor %}
                 <form action="/recheck_finding/{{ finding.id }}" method="post" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-primary">Re-check Results</button>
                 </form>
             </div>
             <div class="tab-pane fade" id="patch">
                 {% if not finding.patch %}
                     <form action="/generate_patch/{{ finding.id }}" method="post">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn btn-primary">Generate Patch</button>
                     </form>
                 {% else %}
                     <form action="/update_patch/{{ finding.id }}" method="post">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <div class="mb-3">
                             <textarea name="patch_diff" class="form-control" rows="10">{{ finding.patch.generated_patch_diff }}</textarea>
                         </div>
                         <button type="submit" class="btn btn-primary">Update Patch</button>
                     </form>
                     <form action="/rewrite_remediation/{{ finding.id }}" method="post" style="display: inline;" class="ms-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                         <button type="submit" class="btn btn-secondary">Re-write Remediation</button>
                     </form>
                 {% endif %}
@@ -147,10 +152,12 @@
             const loadingIndicator = document.getElementById('loading-indicator');
             loadingIndicator.style.display = 'block';
 
+            const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '{{ csrf_token() }}';
             const response = await fetch(`/chat/{{ finding.id }}`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
                 },
                 body: JSON.stringify({ message })
             });
@@ -169,8 +176,12 @@
 
         resetChatBtn.addEventListener('click', async () => {
             if (confirm('Are you sure you want to reset the chat history?')) {
+                const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '{{ csrf_token() }}';
                 const response = await fetch(`/reset_chat/finding/{{ finding.id }}`, {
-                    method: 'POST'
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken
+                    }
                 });
 
                 const data = await response.json();

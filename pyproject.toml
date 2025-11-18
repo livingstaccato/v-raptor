@@ -48,6 +48,8 @@ dependencies = [
     "websockets==14.2",
     "GitPython==3.1.43",
     "Flask==3.0.3",
+    "Flask-Limiter==3.5.0",
+    "Flask-WTF==1.2.1",
     "redis==5.0.7",
     "rq==1.16.2",
     "PyGithub==2.5.0",

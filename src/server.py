@@ -3,6 +3,9 @@ import re
 from sqlalchemy import func, case
 from sqlalchemy.orm import selectinload
 from flask import g, Flask, render_template, request, redirect, url_for, flash, jsonify
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from flask_wtf.csrf import CSRFProtect
 from redis import Redis
 from rq import Queue
 from rq.registry import FailedJobRegistry
@@ -34,9 +37,23 @@ from .validators import (
 app = Flask(__name__, static_folder="static")
 app.secret_key = os.urandom(24)
 
+# Initialize CSRF protection
+csrf = CSRFProtect(app)
+
 redis_host = os.getenv("REDIS_HOST", "localhost")
-redis_conn = Redis(host=redis_host, port=6379)
+redis_port = int(os.getenv("REDIS_PORT", "6379"))
+redis_conn = Redis(host=redis_host, port=redis_port)
 q = Queue(connection=redis_conn, default_timeout=3600)
+
+# Initialize rate limiter with Redis backend
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    storage_uri=f"redis://{redis_host}:{redis_port}",
+    default_limits=["200 per hour", "50 per minute"],
+    storage_options={"socket_connect_timeout": 30},
+    strategy="fixed-window",
+)
 
 try:
     from googlesearch import search as google_search_tool
@@ -79,6 +96,7 @@ except ImportError:
 
 
 @app.route("/api/models")
+@limiter.limit("30 per minute")
 def get_models():
     """Get available models for a provider without mutating global config.
 
@@ -139,6 +157,7 @@ def config_page():
 
 
 @app.route("/save_llm_settings", methods=["POST"])
+@limiter.limit("10 per hour")
 def save_llm_settings():
     """Save LLM settings to JSON config file.
 
@@ -303,6 +322,7 @@ def index():
 
 
 @app.route("/add_repo", methods=["POST"])
+@limiter.limit("20 per hour")
 def add_repo():
     """Add a repository with input validation.
 
@@ -548,6 +568,7 @@ def findings_by_description():
 
 
 @app.route("/run_scan/<int:repo_id>", methods=["POST"])
+@limiter.limit("10 per hour")
 def run_scan(repo_id):
     """Run a deep scan with input validation.
 
@@ -600,6 +621,7 @@ def run_scan(repo_id):
 
 
 @app.route("/scan_new_commits/<int:repo_id>", methods=["POST"])
+@limiter.limit("20 per hour")
 def scan_new_commits(repo_id):
     session = g.db_session
     repo = session.query(Repository).get(repo_id)
@@ -626,6 +648,7 @@ def scan_new_commits(repo_id):
 
 
 @app.route("/run_quality_scan/<int:repo_id>", methods=["POST"])
+@limiter.limit("10 per hour")
 def run_quality_scan(repo_id):
     session = g.db_session
     repo = session.query(Repository).get(repo_id)
@@ -682,6 +705,7 @@ def rerun_scan(scan_id):
 
 
 @app.route("/generate_patch/<int:finding_id>", methods=["POST"])
+@limiter.limit("30 per hour")
 def generate_patch(finding_id):
     session = g.db_session
     vcs_service = VCSService(git_provider="github", token="")
@@ -958,6 +982,7 @@ def recheck_finding(finding_id):
 
 
 @app.route("/rewrite_remediation/<int:finding_id>", methods=["POST"])
+@limiter.limit("30 per hour")
 def rewrite_remediation(finding_id):
     session = g.db_session
     vcs_service = VCSService(git_provider="github", token="")
@@ -978,6 +1003,7 @@ def update_patch(finding_id):
 
 
 @app.route("/chat/<int:finding_id>", methods=["POST"])
+@limiter.limit("60 per hour")
 def chat(finding_id):
     message = request.json["message"]
     session = g.db_session
@@ -988,10 +1014,13 @@ def chat(finding_id):
 
 
 @app.route("/ci/scan", methods=["POST"])
+@csrf.exempt
+@limiter.limit("100 per hour")
 def ci_scan():
     """CI/CD webhook scan endpoint with input validation.
 
     FIXED: Added validation for repository URLs and commit hashes.
+    CSRF exempt: This is a webhook endpoint that receives requests from external CI/CD systems.
     """
     # Validate input
     success, error_msg, validated_data = validate_input(

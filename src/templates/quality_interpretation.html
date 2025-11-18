@@ -74,10 +74,12 @@
             const loadingIndicator = document.getElementById('loading-indicator');
             loadingIndicator.style.display = 'block';
 
+            const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '{{ csrf_token() }}';
             const response = await fetch(`/chat_with_quality_interpretation/{{ interpretation.id }}`, {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrfToken
                 },
                 body: JSON.stringify({ message })
             });
@@ -96,8 +98,12 @@
 
         resetChatBtn.addEventListener('click', async () => {
             if (confirm('Are you sure you want to reset the chat history?')) {
+                const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '{{ csrf_token() }}';
                 const response = await fetch(`/reset_chat/quality/{{ interpretation.id }}`, {
-                    method: 'POST'
+                    method: 'POST',
+                    headers: {
+                        'X-CSRFToken': csrfToken
+                    }
                 });
 
                 const data = await response.json();

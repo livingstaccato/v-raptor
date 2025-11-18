@@ -6,6 +6,7 @@
   <div class="card-body">
     <p>We found the following repository. Please select the primary branch you wish to monitor.</p>
     <form action="/confirm_add_repo" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="mb-3">
             <label for="repo_url" class="form-label">Repository URL</label>
             <input type="text" name="repo_url" id="repo_url" class="form-control" value="{{ repo_url }}" readonly>

@@ -14,6 +14,7 @@
     <div class="card-header">Run New Scan</div>
     <div class="card-body">
         <form action="/run_scan/{{ repo.id }}" method="post" class="d-inline">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-check form-switch d-inline-block">
                 <input class="form-check-input" type="checkbox" id="auto_patch" name="auto_patch">
                 <label class="form-check-label" for="auto_patch">Auto-Patch</label>
@@ -25,9 +26,11 @@
             <button type="submit" class="btn btn-primary">Run Deep Scan</button>
         </form>
         <form action="/link_cves/{{ repo.id }}" method="post" style="display: inline;" class="ms-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn btn-info">Link CVEs to Findings</button>
         </form>
         <form action="/run_quality_scan/{{ repo.id }}" method="post" style="display: inline;" class="ms-2">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button type="submit" class="btn btn-warning">Run Code Quality Scan</button>
         </form>
     </div>
@@ -37,6 +40,7 @@
     <div class="card-header">Periodic Scanning</div>
     <div class="card-body">
         <form action="/repository/{{ repo.id }}/periodic_scan" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="form-check form-switch">
                 <input class="form-check-input" type="checkbox" name="periodic_scan_enabled" value="true" id="periodicScanSwitch" {% if repo.periodic_scan_enabled %}checked{% endif %}>
                 <label class="form-check-label" for="periodicScanSwitch">Enable Periodic Scanning</label>

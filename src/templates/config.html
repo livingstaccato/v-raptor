@@ -22,6 +22,7 @@
     </div>
     <div class="card-body">
         <form action="/save_llm_settings" method="post">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="tab-content">
                 <div class="tab-pane fade show active" id="scanner">
                     <p>This model is used for analyzing code and finding vulnerabilities.</p>
@@ -112,12 +113,17 @@
                     </div>
                 </div>
                 <div class="tab-pane fade" id="api-keys">
-                    <div class="mb-3">
-                        <label for="gemini_api_key" class="form-label">Gemini API Key</label>
-                        <form action="/save_gemini_api_key" method="post" class="d-flex">
-                            <input type="text" name="gemini_api_key" class="form-control" placeholder="Enter new Gemini API Key">
-                            <button type="submit" class="btn btn-primary ms-2">Save</button>
-                        </form>
+                    <div class="alert alert-info">
+                        <h5>API Key Configuration</h5>
+                        <p>For security reasons, API keys are <strong>only loaded from environment variables</strong>. They are never stored in the database or configuration files.</p>
+                        <p>To set your API keys, use the following environment variables:</p>
+                        <ul>
+                            <li><code>GEMINI_API_KEY</code> - Your Gemini API key</li>
+                            <li><code>GITHUB_TOKEN</code> - Your GitHub personal access token</li>
+                        </ul>
+                        <p>Example:</p>
+                        <pre><code>export GEMINI_API_KEY='your-gemini-api-key-here'
+export GITHUB_TOKEN='your-github-token-here'</code></pre>
                     </div>
                 </div>
                 <div class="tab-pane fade" id="tool-paths">

@@ -5,6 +5,7 @@
   <div class="card-header">Add Repository</div>
   <div class="card-body">
     <form action="/add_repo" method="post" class="row g-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="col-auto">
         <input type="text" name="repo_url" class="form-control" placeholder="Repository URL" size="60">
       </div>
@@ -38,10 +39,12 @@
           <td>
             {% if repo.needs_scan %}
               <form action="/scan_new_commits/{{ repo.id }}" method="post" style="display: inline;">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="btn btn-success btn-sm">Scan New Commits</button>
               </form>
             {% endif %}
             <form action="/remove_repo/{{ repo.id }}" method="post" style="display: inline;">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
               <button type="submit" class="btn btn-danger btn-sm">Remove</button>
             </form>
           </td>

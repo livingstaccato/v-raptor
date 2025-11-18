@@ -33,6 +33,9 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 
     const updateScanStatus = () => {
+        // Get CSRF token from meta tag or hidden input
+        const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '{{ csrf_token() }}';
+
         fetch('/api/scans')
             .then(response => response.json())
             .then(scans => {
@@ -42,7 +45,7 @@ document.addEventListener('DOMContentLoaded', function() {
                         const statusCell = row.querySelector('.status-cell');
                         const statusMessageCell = row.querySelector('.status-message-cell');
                         const actionsCell = row.querySelector('.actions-cell');
-                        
+
                         let badgeClass = 'bg-dark';
                         if (scan.status === 'running') {
                             badgeClass = 'bg-info';
@@ -53,17 +56,19 @@ document.addEventListener('DOMContentLoaded', function() {
                         } else if (scan.status === 'failed') {
                             badgeClass = 'bg-danger';
                         }
-                        
+
                         statusCell.innerHTML = `<span class="badge ${badgeClass}">${scan.status}</span>`;
                         statusMessageCell.innerHTML = scan.status_message || '';
-                        
+
                         if (scan.status === 'running') {
                             actionsCell.innerHTML = `
                                 <a href="/scan/${scan.id}" class="btn btn-primary btn-sm">View</a>
                                 <form action="/stop_scan/${scan.id}" method="post" style="display: inline;" class="ms-2">
+                                    <input type="hidden" name="csrf_token" value="${csrfToken}">
                                     <button type="submit" class="btn btn-warning btn-sm">Stop</button>
                                 </form>
                                 <form action="/delete_scan/${scan.id}" method="post" style="display: inline;">
+                                    <input type="hidden" name="csrf_token" value="${csrfToken}">
                                     <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure you want to delete this scan? This action cannot be undone.');">Delete</button>
                                 </form>
                             `;
@@ -71,6 +76,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             actionsCell.innerHTML = `
                                 <a href="/scan/${scan.id}" class="btn btn-primary btn-sm">View</a>
                                 <form action="/delete_scan/${scan.id}" method="post" style="display: inline;">
+                                    <input type="hidden" name="csrf_token" value="${csrfToken}">
                                     <button type="submit" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure you want to delete this scan? This action cannot be undone.');">Delete</button>
                                 </form>
                             `;
