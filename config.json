@@ -1,0 +1,17 @@
+{
+  "scanner_llm_provider": "ollama",
+  "scanner_llama_cpp_model_path": "/path/to/your/scanner/model.gguf",
+  "scanner_ollama_model": "gemma3:latest",
+  "scanner_ollama_url": "http://localhost:11434",
+  "scanner_gemini_model": "gemini-1.5-flash-latest",
+  "patcher_llm_provider": "ollama",
+  "patcher_llama_cpp_model_path": "/path/to/your/patcher/model.gguf",
+  "patcher_ollama_model": "gemma3:latest",
+  "patcher_ollama_url": "http://localhost:11434",
+  "patcher_gemini_model": "gemini-1.5-pro-latest",
+  "llm_timeout": 60,
+  "database_url": "sqlite:///v-raptor.db",
+  "gitleaks_path": "gitleaks",
+  "semgrep_path": "semgrep",
+  "bandit_path": "bandit"
+}

@@ -6,10 +6,11 @@ from .llm_providers.gemini import GeminiProvider
 from .llm_providers.llama_cpp import LlamaCppProvider
 from .llm_providers.ollama import OllamaProvider
 
+
 class LLMService:
     def __init__(self):
-        self.scanner_client = self._initialize_client('scanner')
-        self.patcher_client = self._initialize_client('patcher')
+        self.scanner_client = self._initialize_client("scanner")
+        self.patcher_client = self._initialize_client("patcher")
         self.tools = [
             {
                 "name": "run_semgrep",
@@ -19,11 +20,11 @@ class LLMService:
                     "properties": {
                         "file_path": {
                             "type": "string",
-                            "description": "The path to the file to scan."
+                            "description": "The path to the file to scan.",
                         }
                     },
-                    "required": ["file_path"]
-                }
+                    "required": ["file_path"],
+                },
             },
             {
                 "name": "run_bandit",
@@ -33,11 +34,11 @@ class LLMService:
                     "properties": {
                         "file_path": {
                             "type": "string",
-                            "description": "The path to the file to scan."
+                            "description": "The path to the file to scan.",
                         }
                     },
-                    "required": ["file_path"]
-                }
+                    "required": ["file_path"],
+                },
             },
             {
                 "name": "run_gitleaks",
@@ -47,11 +48,11 @@ class LLMService:
                     "properties": {
                         "repo_path": {
                             "type": "string",
-                            "description": "The path to the repository to scan."
+                            "description": "The path to the repository to scan.",
                         }
                     },
-                    "required": ["repo_path"]
-                }
+                    "required": ["repo_path"],
+                },
             },
             {
                 "name": "google_web_search",
@@ -61,12 +62,12 @@ class LLMService:
                     "properties": {
                         "query": {
                             "type": "string",
-                            "description": "The search query to find information on the web."
+                            "description": "The search query to find information on the web.",
                         }
                     },
-                    "required": ["query"]
-                }
-            }
+                    "required": ["query"],
+                },
+            },
         ]
 
     def _initialize_client(self, client_type: str) -> BaseLLMProvider:
@@ -74,21 +75,23 @@ class LLMService:
         provider = getattr(config, f"{prefix}_LLM_PROVIDER")
         print(f"Initializing '{client_type}' client with provider '{provider}'...")
 
-        if provider == 'gemini':
-            api_key = os.getenv('GEMINI_API_KEY')
+        if provider == "gemini":
+            # FIXED: Only use environment variable for API key (no plaintext file)
+            api_key = os.getenv("GEMINI_API_KEY")
             if not api_key:
-                try:
-                    with open('api_key.txt', 'r') as f:
-                        api_key = f.read().strip()
-                except FileNotFoundError:
-                    raise ValueError(f"GEMINI_API_KEY not found for {client_type}.")
+                raise ValueError(
+                    f"GEMINI_API_KEY environment variable not set for {client_type}. "
+                    f"Please set it with: export GEMINI_API_KEY='your-key-here'"
+                )
             return GeminiProvider(api_key=api_key, timeout=config.LLM_TIMEOUT)
-        elif provider == 'llama.cpp':
+        elif provider == "llama.cpp":
             model_path = getattr(config, f"{prefix}_LLAMA_CPP_MODEL_PATH")
             if not model_path or not os.path.exists(model_path):
-                raise ValueError(f"Llama.cpp model path not found for {client_type}: {model_path}")
+                raise ValueError(
+                    f"Llama.cpp model path not found for {client_type}: {model_path}"
+                )
             return LlamaCppProvider(model_path=model_path)
-        elif provider == 'ollama':
+        elif provider == "ollama":
             host_url = getattr(config, f"{prefix}_OLLAMA_URL")
             return OllamaProvider(host_url=host_url, timeout=config.LLM_TIMEOUT)
         else:
@@ -97,14 +100,16 @@ class LLMService:
     def _get_model_name(self, client_type):
         prefix = client_type.upper()
         provider = getattr(config, f"{prefix}_LLM_PROVIDER")
-        if provider == 'ollama':
+        if provider == "ollama":
             return getattr(config, f"{prefix}_OLLAMA_MODEL")
-        elif provider == 'gemini':
+        elif provider == "gemini":
             return getattr(config, f"{prefix}_GEMINI_MODEL")
         # llama.cpp doesn't have a model name in the same way, it's part of the client initialization.
         return None
 
-    def _create_chat_completion(self, client: BaseLLMProvider, model_name, prompt, is_json=True):
+    def _create_chat_completion(
+        self, client: BaseLLMProvider, model_name, prompt, is_json=True
+    ):
         return client.create_chat_completion(model_name, prompt, is_json)
 
     def analyze_diff_with_tools(self, diff):
@@ -137,19 +142,23 @@ Example response:
   ]
 }}
 """
-        return self._create_chat_completion(self.scanner_client, self._get_model_name('scanner'), prompt)
+        return self._create_chat_completion(
+            self.scanner_client, self._get_model_name("scanner"), prompt
+        )
 
     def analyze_file(self, file_path, existing_findings=None):
-        with open(file_path, 'r') as f:
+        with open(file_path, "r") as f:
             content = f.read()
 
         existing_findings_str = ""
         if existing_findings:
             existing_findings_str = "\n\n**Existing Findings:**\n"
             for finding in existing_findings:
-                existing_findings_str += f"- **Line {finding.line_number}:** {finding.description}\n"
+                existing_findings_str += (
+                    f"- **Line {finding.line_number}:** {finding.description}\n"
+                )
 
-        is_test_file = 'test' in file_path.lower()
+        is_test_file = "test" in file_path.lower()
         test_file_instruction = ""
         if is_test_file:
             test_file_instruction = "\n- **This is a test file.** Do not report hardcoded secrets or credentials as vulnerabilities, as they are likely to be intentional for testing purposes."
@@ -200,7 +209,9 @@ If no vulnerabilities are found, respond with an empty JSON object: `{{}}`.
   ]
 }}
 ```"""
-        return self._create_chat_completion(self.scanner_client, self._get_model_name('scanner'), prompt)
+        return self._create_chat_completion(
+            self.scanner_client, self._get_model_name("scanner"), prompt
+        )
 
     def interpret_quality_metrics(self, metric):
         """Interprets the quality metrics for a file."""
@@ -225,7 +236,9 @@ Metrics:
 
 Interpretation (provide only the interpretation, no conversational text):
 """
-        return self._create_chat_completion(self.scanner_client, self._get_model_name('scanner'), prompt, is_json=False)
+        return self._create_chat_completion(
+            self.scanner_client, self._get_model_name("scanner"), prompt, is_json=False
+        )
 
     def get_root_cause_analysis(self, code_snippet, vulnerability_type):
         prompt = f"""You are a senior security engineer. Provide a direct and concise explanation of this potential '{vulnerability_type}' vulnerability in the provided code snippet.
@@ -236,7 +249,9 @@ Code Snippet:
 ```
 
 Explain the vulnerability, its potential impact, and how to fix it. Format your response as clean Markdown. Do not ask any questions or include any conversational text."""
-        return self._create_chat_completion(self.scanner_client, self._get_model_name('scanner'), prompt, is_json=False)
+        return self._create_chat_completion(
+            self.scanner_client, self._get_model_name("scanner"), prompt, is_json=False
+        )
 
     def generate_test_script(self, code_snippet, vulnerability_hypothesis):
         prompt = f"""You are a security engineer. Write a standalone Python script to test for a potential '{vulnerability_hypothesis}' vulnerability in a function that contains this code:
@@ -252,7 +267,9 @@ The script must:
 4.  Print a clear message indicating whether the vulnerability was confirmed or not.
 5.  Respond with ONLY the raw Python code inside a ```python markdown block. Do not include any explanations.
 """
-        response = self._create_chat_completion(self.scanner_client, self._get_model_name('scanner'), prompt, is_json=False)
+        response = self._create_chat_completion(
+            self.scanner_client, self._get_model_name("scanner"), prompt, is_json=False
+        )
         return self.extract_python_code(response)
 
     def interpret_results(self, analysis, test_script, script_output):
@@ -268,7 +285,9 @@ Script Output:
 {script_output}
 
 Respond with a single float number between 0.0 and 1.0, where 0.0 is not confident and 1.0 is very confident. Respond with ONLY the number. Example: 0.9"""
-        response = self._create_chat_completion(self.scanner_client, self._get_model_name('scanner'), prompt, is_json=False)
+        response = self._create_chat_completion(
+            self.scanner_client, self._get_model_name("scanner"), prompt, is_json=False
+        )
         try:
             return float(response.strip())
         except (ValueError, TypeError):
@@ -288,7 +307,9 @@ Root Cause Analysis:
 Refactor the code to fix the vulnerability. Maintain existing logic and style.
 Provide ONLY the fix in the git diff format. Do not include a commit message or any other text. Do not include any conversational text.
 Start the diff with '--- a/' and '+++ b/'."""
-        return self._create_chat_completion(self.patcher_client, self._get_model_name('patcher'), prompt, is_json=False)
+        return self._create_chat_completion(
+            self.patcher_client, self._get_model_name("patcher"), prompt, is_json=False
+        )
 
     def analyze_configuration(self, config_content):
         prompt = f"""You are a senior security engineer. Analyze the following configuration file for security misconfigurations.
@@ -296,18 +317,20 @@ Start the diff with '--- a/' and '+++ b/'."""
 {config_content}
 
 Respond with a JSON object containing a list of misconfigurations. Each misconfiguration should have "line_number" and "description". If none, respond with an empty list."""
-        return self._create_chat_completion(self.scanner_client, self._get_model_name('scanner'), prompt)
+        return self._create_chat_completion(
+            self.scanner_client, self._get_model_name("scanner"), prompt
+        )
 
     def extract_json(self, text):
-        match = re.search(r'```json\n(.*?)\n```', text, re.DOTALL)
+        match = re.search(r"```json\n(.*?)\n```", text, re.DOTALL)
         if match:
             return match.group(1).strip()
-        if text.strip().startswith('{'):
+        if text.strip().startswith("{"):
             return text.strip()
         return "{}"
 
     def extract_python_code(self, text):
-        match = re.search(r'```python\n(.*?)\n```', text, re.DOTALL)
+        match = re.search(r"```python\n(.*?)\n```", text, re.DOTALL)
         if match:
             return match.group(1).strip()
         return text.strip()
@@ -322,8 +345,12 @@ Search Results:
 {search_results}
 
 Respond with a JSON object with a single key, "false_positive", which is a boolean. Do not include any explanations or ask any questions."""
-        return self._create_chat_completion(self.scanner_client, self._get_model_name('scanner'), prompt)
+        return self._create_chat_completion(
+            self.scanner_client, self._get_model_name("scanner"), prompt
+        )
 
     def get_available_models(self, client_type):
-        client = self.scanner_client if client_type == 'scanner' else self.patcher_client
+        client = (
+            self.scanner_client if client_type == "scanner" else self.patcher_client
+        )
         return client.get_available_models()

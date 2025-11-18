@@ -2,12 +2,31 @@ import docker
 import io
 import tarfile
 
+
 class SandboxService:
     def __init__(self):
+        """Initialize sandbox service and validate Docker image exists.
+
+        Raises:
+            RuntimeError: If Docker is not running or sandbox image is not found
+        """
         try:
             self.client = docker.from_env()
             # This is the name of the pre-built image. You must create this image.
-            self.image_name = "v-raptor-sandbox:latest" 
+            self.image_name = "v-raptor-sandbox:latest"
+
+            # FIXED: Validate sandbox image exists on initialization
+            # This fails early instead of silently failing later during scans
+            try:
+                self.client.images.get(self.image_name)
+                print(f"✓ Sandbox image '{self.image_name}' found and ready.")
+            except docker.errors.ImageNotFound:
+                raise RuntimeError(
+                    f"Docker image '{self.image_name}' not found.\n"
+                    f"Please build it with:\n"
+                    f"  docker build -t {self.image_name} .\n"
+                    f"Or use the existing Dockerfile in the project root."
+                )
         except docker.errors.DockerException as e:
             raise RuntimeError(f"Docker is not running or misconfigured: {e}")
 
@@ -17,9 +36,7 @@ class SandboxService:
             print(f"Creating sandbox from image: {self.image_name}...")
             # Run container with a command that keeps it alive
             container = self.client.containers.run(
-                self.image_name, 
-                command='tail -f /dev/null', 
-                detach=True
+                self.image_name, command="tail -f /dev/null", detach=True
             )
             print(f"Sandbox created with ID: {container.id[:12]}")
             return container.id
@@ -36,7 +53,7 @@ class SandboxService:
         try:
             container = self.client.containers.get(container_id)
             exit_code, output = container.exec_run(command)
-            return output.decode('utf-8')
+            return output.decode("utf-8")
         except Exception as e:
             print(f"Error executing command in sandbox: {e}")
             return None
@@ -54,22 +71,24 @@ class SandboxService:
         script_path_container = "/app/test_script.py"
         try:
             container = self.client.containers.get(container_id)
-            
+
             # Create a tar archive in memory
             pw_tarstream = io.BytesIO()
-            pw_tar = tarfile.TarFile(fileobj=pw_tarstream, mode='w')
-            file_data = script_code.encode('utf8')
-            tarinfo = tarfile.TarInfo(name='test_script.py')
+            pw_tar = tarfile.TarFile(fileobj=pw_tarstream, mode="w")
+            file_data = script_code.encode("utf8")
+            tarinfo = tarfile.TarInfo(name="test_script.py")
             tarinfo.size = len(file_data)
             pw_tar.addfile(tarinfo, io.BytesIO(file_data))
             pw_tar.close()
             pw_tarstream.seek(0)
 
             # Use put_archive to copy the script file into the container
-            container.put_archive('/app/', pw_tarstream)
+            container.put_archive("/app/", pw_tarstream)
 
             # Execute the script
-            return self.execute_in_sandbox(container_id, f'python3 {script_path_container}')
+            return self.execute_in_sandbox(
+                container_id, f"python3 {script_path_container}"
+            )
 
         except Exception as e:
             print(f"Error executing Python script: {e}")
@@ -85,6 +104,6 @@ class SandboxService:
             container.stop(timeout=5)
             container.remove()
         except docker.errors.NotFound:
-            pass # Container already gone
+            pass  # Container already gone
         except Exception as e:
             print(f"Error destroying sandbox: {e}")
