@@ -24,6 +24,24 @@ V-Raptor is an AI agent for automated code analysis, bug detection, and remediat
 - Go
 - Redis
 
+### Environment Variables
+
+V-Raptor requires the following environment variables to be set:
+
+```bash
+# Required for Gemini LLM provider
+export GEMINI_API_KEY='your-gemini-api-key-here'
+
+# Required for creating pull requests with patches
+export GITHUB_TOKEN='your-github-token-here'
+
+# Optional - Redis configuration
+export REDIS_HOST='localhost'  # Default: localhost
+export REDIS_PORT='6379'        # Default: 6379
+```
+
+**Security Note:** API keys are ONLY loaded from environment variables. They are never stored in files or the database. See [SECURITY_FIXES.md](SECURITY_FIXES.md) for details on security improvements.
+
 ### Installation
 
 1. Clone the repository:
@@ -34,14 +52,23 @@ git clone https://github.com/your-username/v-raptor.git
 
 2. Install the dependencies:
 
-```
+```bash
 ./run.sh
 ```
 
-Also initialize the DB:
-```
+3. Initialize the database:
+
+```bash
 ./run.sh --init-db
 ```
+
+4. Build the Docker sandbox image:
+
+```bash
+docker build -t v-raptor-sandbox:latest .
+```
+
+This image is required for secure vulnerability testing and patch validation. The application will fail to start if this image is not present.
 
 ### Running with Docker Compose
 
@@ -109,7 +136,31 @@ You can also output the findings in JSON format, which is useful for scripting a
 
 ## Configuration
 
-All configuration is done through the web UI. Go to the "Configuration" page to set up your API keys and other settings.
+V-Raptor uses a hybrid configuration approach:
+
+### Environment Variables (Required for Secrets)
+
+**API keys and tokens must be set via environment variables** for security:
+- `GEMINI_API_KEY` - Required for Gemini LLM provider
+- `GITHUB_TOKEN` - Required for creating pull requests
+
+### Configuration File (config.json)
+
+Application settings are stored in `config.json` at the project root. You can modify this file directly or use the web UI configuration page to update:
+- LLM provider selection (Gemini, Ollama, llama.cpp)
+- Model names and endpoints
+- Timeout values
+- Database and tool paths
+
+### Web UI Configuration
+
+Go to the "Configuration" page in the web UI to:
+- Select LLM providers
+- Configure model settings
+- Adjust timeout values
+- Test LLM connectivity
+
+**Note:** The web UI cannot be used to set API keys for security reasons. All secrets must be set via environment variables.
 
 ## Advanced Usage
 
