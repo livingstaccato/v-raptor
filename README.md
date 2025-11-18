@@ -38,9 +38,16 @@ export GITHUB_TOKEN='your-github-token-here'
 # Optional - Redis configuration
 export REDIS_HOST='localhost'  # Default: localhost
 export REDIS_PORT='6379'        # Default: 6379
+
+# Optional - Logging configuration
+export LOG_LEVEL='INFO'         # Default: INFO (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+export LOG_FORMAT='console'     # Default: console (console or json)
+export LOG_FILE='/var/log/v-raptor.log'  # Optional: file path for logs
 ```
 
 **Security Note:** API keys are ONLY loaded from environment variables. They are never stored in files or the database. See [SECURITY_FIXES.md](SECURITY_FIXES.md) for details on security improvements.
+
+**Logging Note:** V-Raptor uses structured logging with support for both human-readable console output and JSON formatting for production. Use `LOG_FORMAT=json` for production deployments to enable log aggregation and analysis.
 
 ### Installation
 
