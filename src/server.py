@@ -22,6 +22,14 @@ from .vcs import VCSService
 from .llm import LLMService
 from . import config
 from . import di
+from .validators import (
+    RepositoryUrlInput,
+    RepositoryConfirmInput,
+    ScanConfigInput,
+    PeriodicScanInput,
+    CIScanInput,
+    validate_input,
+)
 
 app = Flask(__name__, static_folder="static")
 app.secret_key = os.urandom(24)
@@ -296,15 +304,30 @@ def index():
 
 @app.route("/add_repo", methods=["POST"])
 def add_repo():
-    repo_url = request.form["repo_url"]
+    """Add a repository with input validation.
+
+    FIXED: Added input validation to prevent injection attacks.
+    """
+    # Validate input
+    success, error_msg, validated_data = validate_input(
+        RepositoryUrlInput, {"repo_url": request.form.get("repo_url", "")}
+    )
+
+    if not success:
+        flash(f"Invalid input: {error_msg}", "error")
+        return redirect(url_for("index"))
+
+    repo_url = validated_data["repo_url"]
     vcs_service = VCSService(git_provider="github", token="")
     base_url, detected_branch = vcs_service.parse_and_validate_repo_url(repo_url)
+
     if not base_url:
         flash(
             f"Error: Could not find a valid repository at '{repo_url}'. Please check the URL.",
             "error",
         )
         return redirect(url_for("index"))
+
     branches = vcs_service.get_branches(base_url)
     if not branches:
         flash(
@@ -312,6 +335,7 @@ def add_repo():
             "error",
         )
         return redirect(url_for("index"))
+
     return render_template(
         "select_branch.html",
         repo_url=base_url,
@@ -322,12 +346,31 @@ def add_repo():
 
 @app.route("/confirm_add_repo", methods=["POST"])
 def confirm_add_repo():
-    repo_url = request.form["repo_url"]
-    selected_branch = request.form["branch"]
+    """Confirm adding repository with input validation.
+
+    FIXED: Added input validation to prevent injection attacks.
+    """
+    # Validate input
+    success, error_msg, validated_data = validate_input(
+        RepositoryConfirmInput,
+        {
+            "repo_url": request.form.get("repo_url", ""),
+            "branch": request.form.get("branch", ""),
+        },
+    )
+
+    if not success:
+        flash(f"Invalid input: {error_msg}", "error")
+        return redirect(url_for("index"))
+
+    repo_url = validated_data["repo_url"]
+    selected_branch = validated_data["branch"]
+
     session = g.db_session
     if session.query(Repository).filter_by(url=repo_url).first():
         flash(f"Repository '{repo_url}' is already being monitored.", "info")
         return redirect(url_for("index"))
+
     repo_name = repo_url.split("/")[-1].replace(".git", "")
     new_repo = Repository(name=repo_name, url=repo_url, primary_branch=selected_branch)
     session.add(new_repo)
@@ -341,15 +384,35 @@ def confirm_add_repo():
 
 @app.route("/repository/<int:repo_id>/periodic_scan", methods=["POST"])
 def periodic_scan_config(repo_id):
+    """Configure periodic scans with input validation.
+
+    FIXED: Added input validation for scan intervals.
+    """
+    # Validate input
+    success, error_msg, validated_data = validate_input(
+        PeriodicScanInput,
+        {
+            "periodic_scan_enabled": "periodic_scan_enabled" in request.form,
+            "periodic_scan_interval": request.form.get(
+                "periodic_scan_interval", "86400"
+            ),
+        },
+    )
+
+    if not success:
+        flash(f"Invalid input: {error_msg}", "error")
+        return redirect(url_for("repository", repo_id=repo_id))
+
     session = g.db_session
     repo = session.query(Repository).get(repo_id)
     if repo:
-        repo.periodic_scan_enabled = "periodic_scan_enabled" in request.form
-        repo.periodic_scan_interval = int(
-            request.form.get("periodic_scan_interval", 86400)
-        )
+        repo.periodic_scan_enabled = validated_data["periodic_scan_enabled"]
+        repo.periodic_scan_interval = validated_data["periodic_scan_interval"]
         session.commit()
         flash("Periodic scan settings updated.", "success")
+    else:
+        flash("Repository not found.", "error")
+
     return redirect(url_for("repository", repo_id=repo_id))
 
 
@@ -486,12 +549,31 @@ def findings_by_description():
 
 @app.route("/run_scan/<int:repo_id>", methods=["POST"])
 def run_scan(repo_id):
+    """Run a deep scan with input validation.
+
+    FIXED: Added validation for repo_id and scan options.
+    """
     app.logger.info(f"--- run_scan called for repo_id: {repo_id} ---")
+
+    # Validate inputs
+    success, error_msg, validated_data = validate_input(
+        ScanConfigInput,
+        {
+            "repo_id": repo_id,
+            "auto_patch": "auto_patch" in request.form,
+        },
+    )
+
+    if not success:
+        flash(f"Invalid input: {error_msg}", "error")
+        return redirect(url_for("index"))
+
+    auto_patch = validated_data["auto_patch"]
+    include_tests = "include_tests" in request.form
+
     session = g.db_session
     repo = session.query(Repository).get(repo_id)
     if repo:
-        auto_patch = "auto_patch" in request.form
-        include_tests = "include_tests" in request.form
         scan = Scan(
             repository_id=repo.id,
             scan_type="deep",
@@ -511,6 +593,9 @@ def run_scan(repo_id):
         scan.job_id = job.id
         session.commit()
         flash(f"Deep scan initiated for '{repo.name}'.", "info")
+    else:
+        flash("Repository not found.", "error")
+
     return redirect(url_for("repository", repo_id=repo_id))
 
 
@@ -904,12 +989,27 @@ def chat(finding_id):
 
 @app.route("/ci/scan", methods=["POST"])
 def ci_scan():
-    repo_url = request.json["repo_url"]
-    commit_hash = request.json.get("commit_hash")
+    """CI/CD webhook scan endpoint with input validation.
+
+    FIXED: Added validation for repository URLs and commit hashes.
+    """
+    # Validate input
+    success, error_msg, validated_data = validate_input(
+        CIScanInput,
+        {
+            "repo_url": request.json.get("repo_url", "") if request.json else "",
+            "commit_hash": request.json.get("commit_hash") if request.json else None,
+        },
+    )
+
+    if not success:
+        return jsonify({"status": "failure", "message": error_msg}), 400
+
+    repo_url = validated_data["repo_url"]
+    commit_hash = validated_data.get("commit_hash")
 
     session = g.db_session
     vcs_service = VCSService(git_provider="github", token="")
-    orchestrator = Orchestrator(vcs_service, session, di.google_web_search)
 
     repository = session.query(Repository).filter_by(url=repo_url).first()
     if not repository:
