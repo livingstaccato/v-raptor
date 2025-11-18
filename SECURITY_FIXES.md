@@ -2,7 +2,14 @@
 
 ## Session Summary
 
-This session addressed **5 critical security vulnerabilities** identified in the architecture review.
+This session addressed **7 critical/high security vulnerabilities** and added comprehensive security hardening:
+- Code injection vulnerability (CRITICAL)
+- Plaintext API key storage (CRITICAL)
+- Missing input validation (HIGH)
+- Thread-safety issues (HIGH)
+- Missing sandbox validation (MEDIUM)
+- Missing rate limiting (MEDIUM)
+- Missing CSRF protection (MEDIUM)
 
 ---
 
@@ -127,6 +134,137 @@ ruff check --fix src/sandbox.py ✓
 mypy src/sandbox.py --ignore-missing-imports ✓
 ```
 
+### 5. **Missing Input Validation** - HIGH ⚠️
+
+**Issue:** No validation on user inputs for repository URLs, scan configurations, and webhook data.
+
+**Location:** Multiple endpoints in `src/server.py`
+
+**Fix:**
+- Created `src/validators.py` with Pydantic validation models
+- Added comprehensive input validation to all form endpoints:
+  - Repository URLs (GitHub validation, injection prevention)
+  - Branch names (dangerous character filtering)
+  - Scan intervals (1 hour to 1 week range)
+  - Webhook data (URL and commit hash validation)
+- Prevents injection attacks through validated inputs
+
+**Files Created:**
+- ✅ `src/validators.py` (NEW) - Pydantic validation models for all inputs
+
+**Files Modified:**
+- ✅ `src/server.py` - Added validation to 5 critical endpoints
+
+**Endpoints Protected:**
+- `/add_repo` - Repository URL validation
+- `/confirm_add_repo` - URL + branch validation
+- `/repository/<id>/periodic_scan` - Interval validation (1h-1w)
+- `/run_scan/<id>` - Repository ID and options validation
+- `/ci/scan` - Webhook data validation
+
+---
+
+### 6. **Missing Rate Limiting** - MEDIUM 🔒
+
+**Issue:** No rate limiting allowing DoS attacks and resource exhaustion.
+
+**Fix:**
+- Added Flask-Limiter with Redis backend
+- Implemented global rate limits: 200/hour, 50/minute
+- Added stricter limits for resource-intensive endpoints
+
+**Dependencies Added:**
+- Flask-Limiter==3.5.0
+- limits, ordered-set, rich (dependencies)
+
+**Files Modified:**
+- ✅ `pyproject.toml` - Added Flask-Limiter dependency
+- ✅ `src/server.py` - Initialized limiter and applied to endpoints
+
+**Rate Limits Applied:**
+
+| Endpoint | Limit | Reason |
+|----------|-------|--------|
+| Global (all endpoints) | 200/hour, 50/min | Default protection |
+| `/add_repo` | 20/hour | Prevent repository spam |
+| `/run_scan` | 10/hour | Expensive deep scans |
+| `/run_quality_scan` | 10/hour | Resource-intensive |
+| `/scan_new_commits` | 20/hour | Commit analysis |
+| `/generate_patch` | 30/hour | LLM-based generation |
+| `/rewrite_remediation` | 30/hour | LLM rewrites |
+| `/chat` | 60/hour | LLM chat interactions |
+| `/ci/scan` | 100/hour | Webhook scanning |
+| `/save_llm_settings` | 10/hour | Config changes |
+| `/api/models` | 30/minute | API queries |
+
+**Configuration:**
+```python
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    storage_uri=f"redis://{redis_host}:{redis_port}",
+    default_limits=["200 per hour", "50 per minute"],
+    storage_options={"socket_connect_timeout": 30},
+    strategy="fixed-window",
+)
+```
+
+---
+
+### 7. **Missing CSRF Protection** - MEDIUM 🔒
+
+**Issue:** No CSRF tokens on forms, vulnerable to cross-site request forgery.
+
+**Fix:**
+- Added Flask-WTF for CSRF protection
+- Added CSRF tokens to all HTML forms (20+ forms)
+- Added CSRF tokens to all AJAX/fetch requests
+- Exempted webhook endpoint from CSRF (external requests)
+
+**Dependencies Added:**
+- Flask-WTF==1.2.1
+- WTForms, itsdangerous (dependencies)
+
+**Files Modified:**
+- ✅ `src/server.py` - Initialized CSRFProtect, exempted webhook
+- ✅ `src/templates/index.html` - 3 forms protected
+- ✅ `src/templates/repository.html` - 4 forms protected
+- ✅ `src/templates/_scans_table.html` - 2 forms protected
+- ✅ `src/templates/finding.html` - 5 forms + 2 fetch calls protected
+- ✅ `src/templates/scans.html` - Dynamic forms protected
+- ✅ `src/templates/select_branch.html` - 1 form protected
+- ✅ `src/templates/config.html` - 1 form protected, API key UI updated
+- ✅ `src/templates/quality_interpretation.html` - 2 fetch calls protected
+
+**Form Protection:**
+```html
+<form action="/endpoint" method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <!-- form fields -->
+</form>
+```
+
+**AJAX Protection:**
+```javascript
+const csrfToken = document.querySelector('input[name="csrf_token"]')?.value || '{{ csrf_token() }}';
+fetch('/endpoint', {
+    method: 'POST',
+    headers: {
+        'Content-Type': 'application/json',
+        'X-CSRFToken': csrfToken
+    }
+});
+```
+
+**Webhook Exemption:**
+```python
+@app.route("/ci/scan", methods=["POST"])
+@csrf.exempt  # External webhooks don't have CSRF tokens
+@limiter.limit("100 per hour")
+def ci_scan():
+    ...
+```
+
 ---
 
 ## 📊 Impact Summary
@@ -135,8 +273,11 @@ mypy src/sandbox.py --ignore-missing-imports ✓
 |---------------|----------|--------|--------|
 | Code Injection | CRITICAL | ✅ FIXED | Prevents RCE via config UI |
 | Plaintext API Keys | CRITICAL | ✅ FIXED | Prevents credential theft |
+| Missing Input Validation | HIGH | ✅ FIXED | Prevents injection attacks |
 | Thread-Safety | HIGH | ✅ FIXED | Prevents race conditions |
-| Sandbox Validation | HIGH | ✅ FIXED | Prevents silent scan failures |
+| Sandbox Validation | MEDIUM | ✅ FIXED | Prevents silent scan failures |
+| Missing Rate Limiting | MEDIUM | ✅ FIXED | Prevents DoS and resource exhaustion |
+| Missing CSRF Protection | MEDIUM | ✅ FIXED | Prevents cross-site request forgery |
 
 ---
 
@@ -229,19 +370,31 @@ docker build -t v-raptor-sandbox:latest .
 
 ---
 
-## 📚 Next Steps (Not Done This Session)
+## 📚 Potential Future Improvements
 
-### Priority 2 (Recommended)
-- [ ] Add rate limiting to scan endpoints
-- [ ] Add input validation to repository URLs
-- [ ] Add CSRF protection to forms
-- [ ] Add session security improvements
+### Authentication & Authorization (Not Implemented)
+- [ ] Add user authentication (login system)
+- [ ] Add API key authentication for programmatic access
+- [ ] Add role-based access control (RBAC)
+- [ ] Add session management with secure cookies
 
-### Priority 3 (Nice to Have)
-- [ ] Add comprehensive logging
-- [ ] Add metrics collection
-- [ ] Add integration tests
-- [ ] Add API documentation
+### Observability (Not Implemented)
+- [ ] Add structured logging with correlation IDs
+- [ ] Add metrics collection (Prometheus/StatsD)
+- [ ] Add distributed tracing
+- [ ] Add error tracking (Sentry/Rollbar)
+
+### Additional Security (Not Implemented)
+- [ ] Add Content Security Policy (CSP) headers
+- [ ] Add HTTPS enforcement
+- [ ] Add security headers (HSTS, X-Frame-Options, etc.)
+- [ ] Add SQL injection prevention audits
+
+### Testing & Documentation (Not Implemented)
+- [ ] Add integration tests for security features
+- [ ] Add API documentation (OpenAPI/Swagger)
+- [ ] Add security testing (OWASP ZAP, Burp Suite)
+- [ ] Add penetration testing
 
 ---
 
@@ -281,13 +434,25 @@ mypy src/config_schema.py src/config.py src/llm.py src/sandbox.py --ignore-missi
 - `src/sandbox.py` - Docker image validation
 
 **Total Changes:**
-- ~500 lines modified
-- 2 critical vulnerabilities fixed
-- 2 high-severity issues fixed
-- All code quality checks passing
+- ~800 lines modified across 20+ files
+- 2 critical vulnerabilities fixed (Code Injection, API Key Storage)
+- 2 high-severity issues fixed (Input Validation, Thread-Safety)
+- 3 medium-severity issues fixed (Sandbox Validation, Rate Limiting, CSRF)
+- 3 new files created (config_schema.py, validators.py, config.json)
+- 20+ forms protected with CSRF tokens
+- 11 endpoints protected with rate limiting
+- All code quality checks passing (ruff, mypy)
 
 ---
 
 **Session completed:** 2025-11-18
-**Security level:** Significantly improved ✅
-**Production readiness:** Much closer (still needs rate limiting and CSRF protection)
+**Security level:** Significantly hardened ✅
+**Production readiness:** Much improved
+- ✅ Code injection prevented
+- ✅ Secrets properly managed
+- ✅ Input validation comprehensive
+- ✅ Rate limiting implemented
+- ✅ CSRF protection complete
+- ✅ Thread-safety ensured
+- ⚠️  Authentication/authorization not implemented
+- ⚠️  Logging/observability minimal
